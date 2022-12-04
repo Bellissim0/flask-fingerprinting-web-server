@@ -29,60 +29,84 @@ let fingerprint = {
       persistentStorage : null,
       push : null
     },
-    webGLvendor : null,
-    webGLrenderer : null,
+    webGLVendor : null,
+    webGLRenderer : null,
     localStorageAvailable : null,
     sessionStorageAvailable : null,
     indexedDB : null,
     supportedAudioFormats : {
-        
-    }
+      mp3 : null,
+      mp4 : null,
+      aif : null
+    },
+    supportedVideoFormats : {
+      ogg : null,
+      ogg2 : null,
+      h264 : null,
+      webm : null,
+      vp9 : null,
+      hls : null 
+    },
+    enumerateDevicesActive : null,
+    mediaDevices : [],
+    gyroscope : false,
+    vmScore : 0
 }
 
-//retrieve permissions 
-navigator.permissions.query({name:'geolocation'}).then(permission => {
-  if(permission.state === "granted"){
-    fingerprint.permissions.geolocation = "granted"
-  } else if (permission.state === "prompt"){
-    fingerprint.permissions.geolocation = "prompt"
-  } else if (permission.state === "denied"){
-    fingerprint.permissions.geolocation = "denied"
+//adblock detection (not 100% reliable)
+async function detectAdBlock() {
+  let adBlockEnabled = false
+  const googleAdUrl = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
+  try {
+    await fetch(new Request(googleAdUrl)).catch(_ => adBlockEnabled = true)
+  } catch (e) {
+    adBlockEnabled = true
+  } finally {
+    fingerprint.adblockEnabled = adBlockEnabled
   }
-  console.log(fingerprint.permissions.geolocation)
-});
+}
 
-navigator.permissions.query({name:'notifications'}).then(permission => {
-  if(permission.state === "granted"){
-    fingerprint.permissions.notifications = "granted"
-  } else if (permission.state === "prompt"){
-    fingerprint.permissions.notifications = "prompt"
-  } else if (permission.state === "denied"){
-    fingerprint.permissions.notifications = "denied"
-  }
-  console.log(fingerprint.permissions.notifications)
-});
+detectAdBlock()
 
-navigator.permissions.query({name:'persistent-storage'}).then(permission => {
-  if(permission.state === "granted"){
-    fingerprint.permissions.persistentStorage = "granted"
-  } else if (permission.state === "prompt"){
-    fingerprint.permissions.persistentStorage = "prompt"
-  } else if (permission.state === "denied"){
-    fingerprint.permissions.persistentStorage = "denied"
-  }
-  console.log(fingerprint.permissions.notifications)
-});
+async function retrievePermissions(parameter){ 
+  return navigator.permissions.query({name: parameter}).then(permission => {
+    /*if(permission.state === "granted"){
+      return("granted")
+    } else if (permission.state === "prompt"){
+      return("prompt")
+    } else if (permission.state === "denied"){
+      return("denied")
+    }*/
+    return permission.state;
+  });
+}
 
-navigator.permissions.query({name:'push'}).then(permission => {
-  if(permission.state === "granted"){
-    fingerprint.permissions.push = "granted"
-  } else if (permission.state === "prompt"){
-    fingerprint.permissions.push = "prompt"
-  } else if (permission.state === "denied"){
-    fingerprint.permissions.push = "denied"
-  }
-  console.log(fingerprint.permissions.notifications)
-});
+(async () => {
+fingerprint.permissions.geolocation= await retrievePermissions("geolocation")
+fingerprint.permissions.notifications= await retrievePermissions("notifications")
+fingerprint.permissions.persistentStorage= await retrievePermissions("persistent-storage")
+//push notifications in chrome work only with registered user, to implement
+fingerprint.permissions.push= await retrievePermissions("push")
+})();
+
+
+//detect media devices
+if (!navigator.mediaDevices?.enumerateDevices) {
+  fingerprint.enumerateDevicesActive = false
+} else {
+  fingerprint.enumerateDevicesActive = true
+  navigator.mediaDevices.enumerateDevices()
+    .then((devices) => {
+      devices.forEach((device) => {
+        fingerprint.mediaDevices.push(device)
+      });
+    })
+    .catch((err) => {
+      console.error(`${err.name}: ${err.message}`);
+    });
+}
+
+
 
 //navigator
 fingerprint.platform = navigator.platform;
@@ -117,8 +141,6 @@ if(indexedDB){
 } else {
   fingerprint.indexedDB = false
 }
-
-console.log(fingerprint.indexedDB)
 
 //WebGL
 const canvas = document.getElementById("canvas")
@@ -158,19 +180,90 @@ fingerprint.localStorageAvailable = isSessionStorageEnabled()
 fingerprint.sessionStorageAvailable = isSessionStorageEnabled()
 
 //get supported audio formats
+function supportsAudioType(type) {
+  let audio;
 
+  let formats = {
+    mp3: 'audio/mpeg',
+    mp4: 'audio/mp4',
+    aif: 'audio/x-aiff'
+  };
 
-//adblock detection (not 100% reliable)
-async function detectAdBlock() {
-    let adBlockEnabled = false
-    const googleAdUrl = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
-    try {
-      await fetch(new Request(googleAdUrl)).catch(_ => adBlockEnabled = true)
-    } catch (e) {
-      adBlockEnabled = true
-    } finally {
-      fingerprint.adblockEnabled = adBlockEnabled
-    }
+  if(!audio) {
+    audio = document.createElement('audio')
   }
-detectAdBlock()
 
+  return audio.canPlayType(formats[type] || type);
+}
+
+fingerprint.supportedAudioFormats.mp3 = supportsAudioType("mp3")
+fingerprint.supportedAudioFormats.mp4 = supportsAudioType("mp4")
+fingerprint.supportedAudioFormats.aif = supportsAudioType("aif")
+
+//get supported video formats
+function supportsVideoType(type) {
+  const formats = {
+    ogg: 'video/ogg; codecs="theora"',
+    ogg2: 'video/ogg; codecs="opus"',
+    h264: 'video/mp4; codecs="flac"',
+    webm: 'video/webm; codecs="vp8, vorbis"',
+    vp9: 'video/webm; codecs="vp9, opus"',
+    hls: 'application/x-mpegURL; codecs="flac"'
+  };
+
+  const video = document.createElement('video');
+  return video.canPlayType(formats[type] || type);
+}
+
+fingerprint.supportedVideoFormats.ogg = supportsVideoType("ogg")
+fingerprint.supportedVideoFormats.ogg2 = supportsVideoType("ogg2")
+fingerprint.supportedVideoFormats.h264 = supportsVideoType("h264")
+fingerprint.supportedVideoFormats.webm = supportsVideoType("webm")
+fingerprint.supportedVideoFormats.vp9 = supportsVideoType("vp9")
+fingerprint.supportedVideoFormats.hls = supportsVideoType("hls")
+
+//detect if gyroscope is present
+window.addEventListener("devicemotion", function(event){
+    if(event.rotationRate.alpha || event.rotationRate.beta || event.rotationRate.gamma)
+        fingerprint.gyroscope = true;
+});
+
+//detect virtual machine (not reliable but it is something)
+function vmDetect(){ 
+  var o = new ActiveXObject("WbemScripting.SWbemLocator");
+  var s = o.ConnectServer(strServer = ".");
+  var a = s.ExecQuery("SELECT * FROM Win32_NetworkAdapterConfiguration");
+  var e = new Enumerator(a);
+  var mac = [];
+  var regex = /(00:50:56).*/; 
+
+  for (;!e.atEnd();e.moveNext()){ 
+      var x = e.item();
+      if(x.MACAddress){
+          mac[mac.length] = x.MACAddress; 
+      }
+  }
+  for (var i=0; i<mac.length; i++) {
+      if (mac[i].match(regex)) {
+          fingerprint.vmScore += 0.5;
+          break;
+      }
+  }
+}
+if (fingerprint.webGLrenderer.includes("Google SwiftShader") || fingerprint.webGLrenderer.includes("llvmpipe")){
+  fingerprint.vmScore += 0.3
+}
+fingerprint.mediaDevices.every((device) => {
+  if(device.label.includes("VirtualBox")){
+    fingerprint.vmScore += 0.5
+    return;
+  }
+});
+
+console.log(fingerprint)
+
+let xhr = new XMLHttpRequest()
+xhr.open("POST", "http://127.0.0.1:5000/api/data")
+xhr.setRequestHeader("Accept", "application/json");
+xhr.setRequestHeader("Content-Type", "application/json");
+xhr.send(JSON.stringify(fingerprint))
