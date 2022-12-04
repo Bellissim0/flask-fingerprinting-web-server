@@ -3,7 +3,7 @@ let fingerprint = {
     cookiesEnabled : null,
     timezone : null,
     preferredLanguages : null,
-    adblockEnabled : null,
+    adblockEnabled : false,
     doNotTrack : null,
     navigatorPropertiesCount : null,
     buildID : null,
@@ -17,7 +17,7 @@ let fingerprint = {
     screenWidth : null,
     screenHeight : null,
     screenDepth : null,
-    screenAvailtop : null,
+    screenAvailTop : null,
     screenAvailLeft : null,
     screenAvailHeight : null,
     screenAvailWidth : null,
@@ -66,8 +66,6 @@ async function detectAdBlock() {
   }
 }
 
-detectAdBlock()
-
 async function retrievePermissions(parameter){ 
   return navigator.permissions.query({name: parameter}).then(permission => {
     /*if(permission.state === "granted"){
@@ -80,14 +78,6 @@ async function retrievePermissions(parameter){
     return permission.state;
   });
 }
-
-(async () => {
-fingerprint.permissions.geolocation= await retrievePermissions("geolocation")
-fingerprint.permissions.notifications= await retrievePermissions("notifications")
-fingerprint.permissions.persistentStorage= await retrievePermissions("persistent-storage")
-//push notifications in chrome work only with registered user, to implement
-fingerprint.permissions.push= await retrievePermissions("push")
-})();
 
 
 //detect media devices
@@ -115,6 +105,9 @@ fingerprint.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 fingerprint.preferredLanguages = navigator.language || navigator.userLanguage;
 fingerprint.doNotTrack = navigator.doNotTrack
 fingerprint.buildID = navigator.buildID
+if(fingerprint.buildID == undefined){
+  fingerprint.buildID = null
+}
 fingerprint.product = navigator.product
 fingerprint.productSub = navigator.productSub
 fingerprint.vendor = navigator.vendor
@@ -122,6 +115,9 @@ fingerprint.vendorSub = navigator.vendorSub
 fingerprint.hardwareConcurrency = navigator.hardwareConcurrency
 fingerprint.javaEnabled = navigator.javaEnabled()
 fingerprint.deviceMemory = navigator.deviceMemory
+if(fingerprint.deviceMemory == undefined){
+  fingerprint.deviceMemory = null
+}
 
 //screen
 fingerprint.screenWidth = screen.width
@@ -260,10 +256,18 @@ fingerprint.mediaDevices.every((device) => {
   }
 });
 
+(async () => {
+  fingerprint.permissions.geolocation= await retrievePermissions("geolocation")
+  fingerprint.permissions.notifications= await retrievePermissions("notifications")
+  fingerprint.permissions.persistentStorage= await retrievePermissions("persistent-storage")
+  await detectAdBlock()
+  let xhr = new XMLHttpRequest()
+  xhr.open("POST", "http://127.0.0.1:35001/api/data")
+  xhr.setRequestHeader("Accept", "application/json");
+  xhr.setRequestHeader("Content-Type", "application/json");
+  xhr.send(JSON.stringify(fingerprint))
+})();
+
 console.log(fingerprint)
 
-let xhr = new XMLHttpRequest()
-xhr.open("POST", "http://127.0.0.1:5000/api/data")
-xhr.setRequestHeader("Accept", "application/json");
-xhr.setRequestHeader("Content-Type", "application/json");
-xhr.send(JSON.stringify(fingerprint))
+

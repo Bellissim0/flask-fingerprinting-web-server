@@ -1,0 +1,4 @@
+FROM PYTHON:3
+COPY requirements.txt .
+RUN pin install --no-cache-dir -r requirements.txt
+CMD ["flask", "run", "--port=35001"]
